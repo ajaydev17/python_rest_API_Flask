@@ -4,12 +4,13 @@ from flask_restful import Api, Resource
 app = Flask(__name__)
 api = Api(app)
 
+
 def validate_data(data, function_name):
-    if function_name in ['addition', 'substraction', 'multiplication']:
+    if function_name in ['addition', 'subtraction', 'multiplication']:
         if 'a' not in data and 'b' not in data:
             return 301
         else:
-            return 301
+            return 200
     elif function_name == 'division':
         if 'a' not in data and 'b' not in data:
             return 301
@@ -32,21 +33,21 @@ class Add(Resource):
                 'status_code': status_code
             }
 
-        sum = data.get('a', 0) + data.get('b', 0)
+        value = data.get('a', 0) + data.get('b', 0)
         result = {
-            'value': sum,
+            'value': value,
             'status_code': status_code
         }
 
         return jsonify(result)
 
 
-class Substract(Resource):
+class Subtract(Resource):
     def post(self):
         # parse the request JSON body
         data = request.get_json()
 
-        status_code = validate_data(data, 'substraction')
+        status_code = validate_data(data, 'subtraction')
 
         if status_code != 200:
             return {
@@ -54,9 +55,9 @@ class Substract(Resource):
                 'status_code': status_code
             }
 
-        sum = data.get('a', 0) - data.get('b', 0)
+        value = data.get('a', 0) - data.get('b', 0)
         result = {
-            'value': sum,
+            'value': value,
             'status_code': status_code
         }
 
@@ -106,9 +107,10 @@ class Divide(Resource):
 
         return jsonify(result)
 
+
 # Add resource to the API
 api.add_resource(Add, '/addition')
-api.add_resource(Substract, '/substraction')
+api.add_resource(Subtract, '/subtraction')
 api.add_resource(Multiply, '/multiplication')
 api.add_resource(Divide, '/division')
 
