@@ -1,144 +1,171 @@
 from flask import Flask, jsonify, request
 from flask_restful import Api, Resource
 from pymongo import MongoClient
+import bcrypt
 
 app = Flask(__name__)
 api = Api(app)
 
-# Creating connection to mongo database
-client = MongoClient("mongodb://db:27017")
-
-# Accessing the db aNewDB
-db = client.aNewDB
-
-# Accessing the collection userNum from aNewDB
-user_num = db['userNum']
-
-# Insert column num_of_users to userNum
-user_num.insert_one({
-    'num_of_users': 0
-})
-
-# Creating a class to handle user visit requests
-
-class Visit(Resource):
-    def get(self):
-        prev_num = user_num.find({})[0]['num_of_users']
-        new_num = prev_num + 1
-        user_num.update_one({}, {'$set': {'num_of_users': new_num}})
-        return str('Hello user ') + str(new_num)
+client = MongoClient('mongodb://db:27017')
+db = client.SentencesDatabase
+users = db['users']
 
 
+def verify_username_password(user_name, password):
+    # get the hashed password
+    hashed_password = users.find({
+        'username': user_name
+    })[0]['password']
 
-def validate_data(data, function_name):
-    if function_name in ['addition', 'subtraction', 'multiplication']:
-        if 'a' not in data and 'b' not in data:
-            return 301
-        else:
-            return 200
-    elif function_name == 'division':
-        if 'a' not in data and 'b' not in data:
-            return 301
-        elif int(data.get('b')) == 0:
-            return 302
-        else:
-            return 200
+    return bcrypt.hashpw(password.encode('utf8'), hashed_password) == hashed_password
 
 
-class Add(Resource):
+def count_tokens(user_name):
+    tokens = users.find({
+        'username': user_name
+    })[0]['tokens']
+
+    return tokens
+
+
+class Register(Resource):
     def post(self):
-        # parse the request JSON body
-        data = request.get_json()
+        # get the data from post request
+        request_data = request.get_json()
 
-        status_code = validate_data(data, 'addition')
+        # extracting username and password data
+        user_name = request_data['username']
+        password = request_data['password']
 
-        if status_code != 200:
-            return {
-                'message': 'Invalid number of data',
-                'status_code': status_code
-            }
+        # hashing the password before saving to db
+        hashed_password = bcrypt.hashpw(password.encode('utf8'), bcrypt.gensalt())
 
-        value = data.get('a', 0) + data.get('b', 0)
-        result = {
-            'value': value,
-            'status_code': status_code
+        # storing the username and password into SentencesDatabase
+        users.insert_one({
+            'username': user_name,
+            'password': hashed_password,
+            'sentence': '',
+            'tokens': 6
+        })
+
+        result_json = {
+            'status': 200,
+            'message': 'You have successfully signed up for the API.'
         }
 
-        return jsonify(result)
+        return jsonify(result_json)
 
 
-class Subtract(Resource):
+class Store(Resource):
     def post(self):
-        # parse the request JSON body
-        data = request.get_json()
 
-        status_code = validate_data(data, 'subtraction')
+        # get the request data
+        request_data = request.get_json()
 
-        if status_code != 200:
-            return {
-                'message': 'Invalid number of data',
-                'status_code': status_code
+        # access the data
+        user_name = request_data['username']
+        password = request_data['password']
+        sentence = request_data['sentence']
+
+        # verify the username and password match
+        is_verified = verify_username_password(user_name, password)
+
+        if not is_verified:
+            result_json = {
+                'status': 302,
+                'message': 'Invalid username or password'
             }
 
-        value = data.get('a', 0) - data.get('b', 0)
-        result = {
-            'value': value,
-            'status_code': status_code
-        }
+            return jsonify(result_json)
 
-        return jsonify(result)
+        # verify if the user has enough tokens
+        number_of_tokens = count_tokens(user_name)
 
-
-class Multiply(Resource):
-    def post(self):
-        # parse the request JSON body
-        data = request.get_json()
-
-        status_code = validate_data(data, 'multiplication')
-
-        if status_code != 200:
-            return {
-                'message': 'Invalid number of data',
-                'status_code': status_code
+        if number_of_tokens <= 0:
+            result_json = {
+                'status': 301,
+                'message': 'User has not enough tokens.'
             }
 
-        product = data.get('a', 0) * data.get('b', 0)
-        result = {
-            'value': product,
-            'status_code': status_code
+            return jsonify(result_json)
+
+        # update the sentence and token
+        users.update_one({
+            'username': user_name
+        }, {
+            '$set': {
+                'sentence': sentence,
+                'tokens': number_of_tokens - 1
+            }
+        })
+
+        result_json = {
+            'status': 200,
+            'message': 'Sentence saved successfully'
         }
 
-        return jsonify(result)
+        return jsonify(result_json)
 
 
-class Divide(Resource):
+class Get(Resource):
     def post(self):
-        # parse the request JSON body
-        data = request.get_json()
 
-        status_code = validate_data(data, 'division')
+        # get the request data
+        request_data = request.get_json()
 
-        if status_code != 200:
-            return {
-                'message': 'An error occurred',
-                'status_code': status_code
+        # access the data
+        user_name = request_data['username']
+        password = request_data['password']
+
+        # verify the username and password match
+        is_verified = verify_username_password(user_name, password)
+
+        if not is_verified:
+            result_json = {
+                'status': 302,
+                'message': 'Invalid username or password'
             }
 
-        value = int(data.get('a', 0)) * 1.0 / int(data.get('b', 0))
-        result = {
-            'value': value,
-            'status_code': status_code
+            return jsonify(result_json)
+
+        # verify if the user has enough tokens
+        number_of_tokens = count_tokens(user_name)
+
+        if number_of_tokens <= 0:
+            result_json = {
+                'status': 301,
+                'message': 'User has not enough tokens.'
+            }
+
+            return jsonify(result_json)
+
+        # get the sentence value
+        sentence = users.find({
+            'username': user_name
+        })[0]['sentence']
+
+        # update the token
+        users.update_one({
+            'username': user_name
+        }, {
+            '$set': {
+                'tokens': number_of_tokens - 1
+            }
+        })
+
+        result_json = {
+            'status': 200,
+            'sentence': sentence
         }
 
-        return jsonify(result)
+        return jsonify(result_json)
 
 
-# Add resource to the API
-api.add_resource(Add, '/addition')
-api.add_resource(Subtract, '/subtraction')
-api.add_resource(Multiply, '/multiplication')
-api.add_resource(Divide, '/division')
-api.add_resource(Visit, '/visit')
+# add the resources to api
+api.add_resource(Register, '/register')
+api.add_resource(Store, '/store')
+api.add_resource(Get, '/get')
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
