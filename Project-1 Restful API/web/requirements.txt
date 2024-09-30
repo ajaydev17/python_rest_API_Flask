@@ -12,3 +12,4 @@ pytz==2024.2
 six==1.16.0
 werkzeug==3.0.4
 zipp==3.20.2
+pymongo==4.9.1
